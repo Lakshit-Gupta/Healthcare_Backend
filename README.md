@@ -11,7 +11,7 @@ Every non-trivial decision is deliberate: UUID7 primary keys prevent IDOR, objec
 ```bash
 git clone https://github.com/Lakshit-Gupta/Healthcare_Backend.git
 cd Healthcare_Backend
-docker-compose up --build
+docker compose up --build
 ```
 
 API → [http://localhost:8000](http://localhost:8000)  
