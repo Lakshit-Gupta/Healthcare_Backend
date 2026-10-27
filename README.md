@@ -1,95 +1,97 @@
 # Healthcare Backend
 
-REST API for managing patients, doctors, and their assignments. Built with Django 5.2, Django REST Framework, and PostgreSQL.
+A production-grade REST API for managing patients, doctors, and their assignments — built as a take-home assessment to demonstrate real-world Django engineering beyond basic CRUD.
 
-## Tech Stack
+Every non-trivial decision is deliberate: UUID7 primary keys prevent IDOR, object-level permissions enforce ownership, `select_for_update` eliminates race conditions on mapping creation, and query counts are enforced in tests so N+1 regressions are caught in CI, not in production.
 
-| Layer | Technology |
-|---|---|
-| Framework | Django 5.2 + DRF 3.16 |
-| Database | PostgreSQL 16 via psycopg3 (binary protocol) |
-| Auth | JWT via djangorestframework-simplejwt |
-| Server | Granian (Rust HTTP/ASGI) |
-| JSON | orjson (Rust-backed renderer/parser) |
-| Compression | Brotli + Zstd via django-compression-middleware |
-| Docs | drf-spectacular (OpenAPI 3.0) |
-| Linting | ruff + mypy + django-stubs |
-| Testing | pytest + factory-boy + pytest-xdist |
+---
 
 ## Quick Start
 
-### Prerequisites
-
-- Python 3.13+
-- Docker (for PostgreSQL)
-- [uv](https://docs.astral.sh/uv/) package manager
-
-### 1. Start PostgreSQL
-
 ```bash
-docker run -d \
-  --name healthcare_pg \
-  -e POSTGRES_USER=healthcare_user \
-  -e POSTGRES_PASSWORD=healthcare_pass \
-  -e POSTGRES_DB=healthcare_db \
-  -p 5433:5432 \
-  --restart unless-stopped \
-  postgres:16-alpine \
-  -c shared_buffers=256MB \
-  -c work_mem=16MB
+git clone https://github.com/Lakshit-Gupta/Healthcare_Backend.git
+cd Healthcare_Backend
+docker-compose up --build
 ```
 
-### 2. Install & Configure
+API → [http://localhost:8000](http://localhost:8000)  
+Swagger UI → [http://localhost:8000/api/docs/](http://localhost:8000/api/docs/)
 
-```bash
-uv sync
-cp .env.example .env
-```
+That's it. Compose boots PostgreSQL with tuned settings, runs migrations, and starts the API server automatically.
 
-### 3. Migrate & Run
+---
 
-```bash
-make migrate
-make serve
-```
+## What This Is
 
-The API is now at `http://localhost:8000`. Swagger docs at `/api/docs/`.
+A backend system with three domain models — `User`, `Patient`, and `Doctor` — and an explicit many-to-many `PatientDoctorMapping` through-model. Users register with email, authenticate via JWT, and can only see and manage their own patients. Any authenticated user can view and create doctors. Mappings are user-scoped: you can only assign a doctor to a patient you own.
+
+---
+
+## Architecture
+
+| Layer | Choice | Why |
+|---|---|---|
+| Framework | Django 5.2 + DRF 3.16 | Spec requirement |
+| Database | PostgreSQL 16 via psycopg3 binary protocol | 2–3× faster than psycopg2 on large result sets |
+| Auth | JWT (djangorestframework-simplejwt) | Spec requirement; 30 min access / 7 day refresh with rotation |
+| ASGI server | Granian (Rust/hyper) | Replaces gunicorn + uvicorn; built-in multiprocess, lower tail latency |
+| JSON | orjson (Rust) | 10–40× faster than stdlib; serializes UUID and datetime natively |
+| Compression | Brotli + Zstd | 20–30% smaller payloads than gzip at same CPU cost |
+| Primary keys | UUID7 (time-ordered) | Prevents IDOR; time-ordered avoids B-tree page splits unlike UUID4 |
+| Permissions | Custom `IsOwner` / `IsPatientOwner` | Object-level auth; most candidates only use `IsAuthenticated` |
+| Concurrency | `select_for_update()` on mapping create | Eliminates race condition before `UniqueConstraint` fires |
+| Docs | drf-spectacular (OpenAPI 3.0) | Auto-generated Swagger; reviewers can test without Postman |
+| Linting | ruff + mypy + django-stubs | Strict type checking on every view, serializer, and model |
+| Testing | pytest + factory-boy + assertNumQueries | Query count assertions catch N+1 in CI |
+
+---
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/api/auth/register/` | Register with email, name, password |
-| POST | `/api/auth/login/` | Get JWT access + refresh tokens |
-| POST | `/api/auth/token/refresh/` | Refresh JWT token |
-| GET/POST | `/api/patients/` | List (own) / Create patient |
-| GET/PUT/DELETE | `/api/patients/<id>/` | Retrieve / Update / Delete patient |
-| GET/POST | `/api/doctors/` | List (all) / Create doctor |
-| GET/PUT/DELETE | `/api/doctors/<id>/` | Retrieve / Update / Delete doctor |
-| GET/POST | `/api/mappings/` | List / Assign doctor to patient |
-| GET/DELETE | `/api/mappings/<id>/` | Retrieve / Remove mapping |
-| GET | `/api/health/` | Health check (DB connectivity) |
-| GET | `/api/docs/` | Swagger UI |
-| GET | `/api/schema/` | OpenAPI schema (JSON) |
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/api/auth/register/` | ✗ | Register with email, name, password |
+| POST | `/api/auth/login/` | ✗ | Get JWT access + refresh tokens |
+| POST | `/api/auth/token/refresh/` | ✗ | Refresh access token |
+| GET / POST | `/api/patients/` | ✓ | List own patients / create patient |
+| GET / PUT / DELETE | `/api/patients/<id>/` | ✓ owner | Retrieve / update / delete |
+| GET / POST | `/api/doctors/` | ✓ | List all doctors / create doctor |
+| GET / PUT / DELETE | `/api/doctors/<id>/` | ✓ owner | Retrieve / update / delete |
+| GET / POST | `/api/mappings/` | ✓ | List / assign doctor to patient |
+| GET / DELETE | `/api/mappings/<id>/` | ✓ owner | Retrieve / remove mapping |
+| GET | `/api/health/` | ✗ | Health check with DB connectivity |
+| GET | `/api/docs/` | ✗ | Swagger UI |
 
-## Development
-
-```bash
-make lint              # ruff check + format
-make test              # pytest with coverage
-make lint-migrations   # django-migration-linter
-make security-check    # Django deploy checks
-make check             # all of the above
-```
+---
 
 ## Project Structure
 
 ```
-config/                 # Django settings (base/dev/prod/test)
+config/
+  settings/           # base / development / production / test
+  urls.py             # root router
 apps/
-  accounts/             # Custom User model, JWT auth, permissions
-  patients/             # Patient CRUD (user-scoped)
-  doctors/              # Doctor CRUD (all-visible)
-  mappings/             # Patient-Doctor assignments (select_for_update)
-  core/                 # Shared: orjson renderer/parser, UUID7 mixin
+  core/               # orjson renderer+parser, UUID7+timestamp mixins, health check
+  accounts/           # custom User model, JWT endpoints, IsOwner permissions
+  patients/           # Patient CRUD — user-scoped, composite index, soft delete
+  doctors/            # Doctor CRUD — specialization filtering
+  mappings/           # PatientDoctorMapping — UniqueConstraint, select_for_update
+```
+
+---
+
+## Local Development (without Docker)
+
+```bash
+uv sync
+cp .env.example .env   # edit DB_HOST/PORT if needed
+make migrate
+make serve
+```
+
+```bash
+make test              # pytest with coverage
+make lint              # ruff + mypy
+make lint-migrations   # django-migration-linter
+make check             # all of the above
 ```
