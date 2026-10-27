@@ -1,0 +1,26 @@
+# Environment
+.env
+
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Test & coverage
+.coverage
+.pytest_cache/
+
+# Type checker
+.mypy_cache/
+
+# Linter cache
+.ruff_cache/
+
+# AI/internal docs
+PROMPT.md
+VERIFY.md
+FIX.md
+SPECS.txt
+ARCHITECTURE.md

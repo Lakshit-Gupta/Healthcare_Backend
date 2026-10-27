@@ -1,0 +1,116 @@
+[project]
+name = "healthcare-backend"
+version = "0.1.0"
+description = "Healthcare backend API with Django REST Framework"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "django>=5.2,<5.3",
+    "djangorestframework>=3.16,<4",
+    "djangorestframework-simplejwt>=5.5,<6",
+    "psycopg[binary]>=3.2,<4",
+    "django-environ>=0.12,<1",
+    "django-filter>=25,<26",
+    "django-cors-headers>=4,<5",
+    "drf-spectacular>=0.28,<1",
+    "orjson>=3,<4",
+    "uuid-utils>=0.10,<1",
+    "granian>=2,<3",
+    "django-compression-middleware>=0.5,<1",
+    "brotli>=1,<2",
+    "zstandard>=0.23,<1",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.11,<1",
+    "mypy>=1.16,<2",
+    "django-stubs>=5,<6",
+    "djangorestframework-stubs>=3,<4",
+    "pytest>=8,<9",
+    "pytest-django>=4,<5",
+    "pytest-xdist>=3,<4",
+    "pytest-cov>=6,<7",
+    "factory-boy>=3,<4",
+    "pre-commit>=4,<5",
+    "django-migration-linter>=5,<6",
+    "django-debug-toolbar>=5,<6",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+src = ["apps", "config"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",
+    "F",
+    "I",
+    "B",
+    "C4",
+    "DJ",
+    "UP",
+    "S",
+    "T20",
+    "SIM",
+    "RET",
+    "TCH",
+]
+ignore = [
+    "E501",
+    "S101",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/migrations/*.py" = ["E501", "DJ"]
+"**/tests/**" = ["S101", "S105", "S106"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["apps", "config"]
+
+[tool.mypy]
+python_version = "3.13"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "factory.*",
+    "environ",
+    "django_filters.*",
+    "uuid_utils.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["apps.*.tests.*"]
+disable_error_code = ["arg-type", "attr-defined", "assignment", "misc", "type-arg", "unused-ignore"]
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = ["apps.*.migrations.*"]
+ignore_errors = true
+
+[tool.django-stubs]
+django_settings_module = "config.settings.development"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py"]
+addopts = [
+    "-n", "auto",
+    "--dist=loadscope",
+    "--strict-markers",
+    "--tb=short",
+    "-q",
+]
+
+[tool.coverage.run]
+source = ["apps"]
+omit = ["*/migrations/*", "*/tests/*"]
